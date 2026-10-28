@@ -506,14 +506,45 @@ class VoiceAssistantService {
       // Do NOT trigger unwanted secondary robotic voice if audio encounters an error or is stopped
       audio.onerror = () => {
         if (!this.isSpeaking) return;
-        this.finishSpeaking(onEnd);
+        this.speakWithBrowserFallback(cleanedText, onEnd);
       };
 
       await audio.play();
     } catch (err: any) {
       if (err?.name === 'AbortError') return;
-      this.finishSpeaking(onEnd);
+      this.speakWithBrowserFallback(cleanedText, onEnd);
     }
+  }
+
+  private speakWithBrowserFallback(cleanedText: string, onEnd?: () => void) {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(cleanedText);
+        utterance.lang = 'en-IN';
+        utterance.rate = 1.0;
+        utterance.pitch = 1.05;
+
+        const voices = window.speechSynthesis.getVoices();
+        const indianVoice = voices.find((v) => v.lang.includes('IN') || v.name.toLowerCase().includes('india') || v.name.includes('Aria') || v.name.includes('Neerja'));
+        if (indianVoice) {
+          utterance.voice = indianVoice;
+        }
+
+        utterance.onend = () => {
+          this.finishSpeaking(onEnd);
+        };
+        utterance.onerror = () => {
+          this.finishSpeaking(onEnd);
+        };
+
+        window.speechSynthesis.speak(utterance);
+        return;
+      } catch (e) {
+        console.warn('SpeechSynthesis fallback error:', e);
+      }
+    }
+    this.finishSpeaking(onEnd);
   }
 
   private finishSpeaking(onEnd?: () => void) {
